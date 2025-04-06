@@ -1,41 +1,45 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
-  MenuIcon, 
-  BellIcon, 
-  XIcon 
-} from '@heroicons/react/outline';
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+  Menu as MenuIcon, 
+  Notifications as BellIcon, 
+  Close as XIcon 
+} from '@mui/icons-material';
+import { apiRequest, getMockData } from '../../utils/api';
 
 const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [botStatus, setBotStatus] = useState({ isRunning: false });
+  const [isOffline, setIsOffline] = useState(false);
 
   // Fetch bot status and notifications
   useEffect(() => {
     const fetchBotStatus = async () => {
       try {
-        const response = await axios.get(`${API_BASE_URL}/bot/status`);
-        if (response.data.success) {
-          setBotStatus(response.data);
+        const response = await apiRequest('/bot/status', 'GET', null, getMockData('/bot/status'));
+        setBotStatus(response);
+        
+        if (response.isFallback) {
+          setIsOffline(true);
         }
       } catch (error) {
         console.error('Error fetching bot status:', error);
+        setBotStatus(getMockData('/bot/status'));
+        setIsOffline(true);
       }
     };
 
     const fetchNotifications = async () => {
       try {
-        const response = await axios.get(`${API_BASE_URL}/notifications`);
-        if (response.data.success) {
-          setNotifications(response.data.notifications || []);
+        const response = await apiRequest('/notifications', 'GET', null, getMockData('/notifications'));
+        if (response.success) {
+          setNotifications(response.notifications || []);
         }
       } catch (error) {
         console.error('Error fetching notifications:', error);
+        setNotifications(getMockData('/notifications').notifications || []);
       }
     };
 
@@ -56,18 +60,33 @@ const Navbar = () => {
   const handleToggleBot = async () => {
     try {
       const endpoint = botStatus.isRunning ? '/bot/stop' : '/bot/start';
-      const response = await axios.post(`${API_BASE_URL}${endpoint}`);
       
-      if (response.data.success) {
+      if (isOffline) {
+        // In offline mode, just toggle the status locally
+        setBotStatus({
+          ...botStatus,
+          isRunning: !botStatus.isRunning
+        });
+        return;
+      }
+      
+      const response = await apiRequest(endpoint, 'POST');
+      
+      if (response.success) {
         setBotStatus({
           ...botStatus,
           isRunning: !botStatus.isRunning
         });
       } else {
-        console.error(`Error ${botStatus.isRunning ? 'stopping' : 'starting'} bot:`, response.data.error);
+        console.error(`Error ${botStatus.isRunning ? 'stopping' : 'starting'} bot:`, response.error);
       }
     } catch (error) {
       console.error(`Error ${botStatus.isRunning ? 'stopping' : 'starting'} bot:`, error);
+      // Toggle anyway to provide UI feedback in offline mode
+      setBotStatus({
+        ...botStatus,
+        isRunning: !botStatus.isRunning
+      });
     }
   };
 
@@ -86,6 +105,12 @@ const Navbar = () => {
 
   return (
     <>
+      {isOffline && (
+        <div className="bg-yellow-100 text-yellow-800 text-center py-1 text-sm">
+          Working in offline mode - Backend server not connected
+        </div>
+      )}
+      
       <header className="bg-white shadow-sm z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -136,7 +161,7 @@ const Navbar = () => {
                 
                 {/* Notification dropdown */}
                 {showNotifications && (
-                  <div className="origin-top-right absolute right-0 mt-2 w-80 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
+                  <div className="origin-top-right absolute right-0 mt-2 w-80 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
                     <div className="px-4 py-2 border-b border-gray-200">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
@@ -274,7 +299,7 @@ const Navbar = () => {
             <div className="flex-shrink-0 flex border-t border-indigo-700 p-4">
               <div className="flex items-center">
                 <div>
-                  <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse"></div>
+                  <div className={`h-3 w-3 rounded-full ${botStatus.isRunning ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
                 </div>
                 <div className="ml-3">
                   <p className="text-base font-medium text-white">

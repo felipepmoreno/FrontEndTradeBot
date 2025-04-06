@@ -1,12 +1,12 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { 
-  HomeIcon, 
-  CogIcon, 
-  ChartBarIcon, 
-  CurrencyDollarIcon,
-  LightningBoltIcon
-} from '@heroicons/react/outline';
+  Home as HomeIcon, 
+  Settings as CogIcon, 
+  BarChart as ChartBarIcon, 
+  AttachMoney as CurrencyDollarIcon,
+  FlashOn as LightningBoltIcon
+} from '@mui/icons-material';
 
 const Sidebar = () => {
   return (
