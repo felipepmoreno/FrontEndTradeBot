@@ -1,79 +1,187 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Typography, Button, CircularProgress } from '@mui/material';
-import axios from 'axios';
+import { 
+  Container, Typography, Grid, Button, Paper, 
+  Table, TableBody, TableCell, TableContainer, 
+  TableHead, TableRow, IconButton, Box, CircularProgress
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import PauseIcon from '@mui/icons-material/Pause';
+import { useNavigate } from 'react-router-dom';
+import { fetchStrategies, updateStrategy, deleteStrategy } from '../utils/api';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 const Strategies = () => {
   const [strategies, setStrategies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
+  // Fetch strategies data
   useEffect(() => {
-    const fetchStrategies = async () => {
+    const getStrategies = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('/api/strategies');
-        setStrategies(response.data);
+        const data = await fetchStrategies();
+        // Ensure strategies is always an array
+        setStrategies(Array.isArray(data) ? data : []);
         setError(null);
       } catch (err) {
-        setError('Failed to load strategies. Please try again later.');
         console.error('Error fetching strategies:', err);
+        setError('Failed to load strategies. Please try again later.');
+        // Initialize as empty array to prevent map errors
+        setStrategies([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchStrategies();
+    getStrategies();
   }, []);
 
+  const handleCreateStrategy = () => {
+    navigate('/strategies/new');
+  };
+
+  const handleEditStrategy = (id) => {
+    navigate(`/strategies/edit/${id}`);
+  };
+
+  const handleToggleStrategy = async (id, currentStatus) => {
+    try {
+      await updateStrategy(id, { active: !currentStatus });
+      
+      // Update local state
+      setStrategies(strategies.map(strategy => 
+        strategy.id === id ? { ...strategy, active: !currentStatus } : strategy
+      ));
+    } catch (error) {
+      console.error('Error toggling strategy:', error);
+      setError('Failed to update strategy status. Please try again.');
+    }
+  };
+
+  const handleDeleteStrategy = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this strategy?')) {
+      return;
+    }
+    
+    try {
+      await deleteStrategy(id);
+      // Remove from local state
+      setStrategies(strategies.filter(strategy => strategy.id !== id));
+    } catch (error) {
+      console.error('Error deleting strategy:', error);
+      setError('Failed to delete strategy. Please try again.');
+    }
+  };
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" height="80vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
-    <div className="strategies-page">
-      <div className="flex justify-between items-center mb-6">
-        <Typography variant="h4" component="h1">
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+        <Typography variant="h4" gutterBottom>
           Trading Strategies
         </Typography>
-        <Button variant="contained" color="primary">
-          New Strategy
+        <Button 
+          variant="contained" 
+          color="primary" 
+          startIcon={<AddIcon />} 
+          onClick={handleCreateStrategy}
+        >
+          Create Strategy
         </Button>
-      </div>
+      </Box>
+      
+      {error && (
+        <Paper sx={{ p: 2, mb: 3, bgcolor: 'error.light', color: 'error.contrastText' }}>
+          <Typography>{error}</Typography>
+        </Paper>
+      )}
 
-      {loading ? (
-        <div className="flex justify-center my-12">
-          <CircularProgress />
-        </div>
-      ) : error ? (
-        <Card className="p-4 bg-red-50 text-red-700 border border-red-200">
-          {error}
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {strategies.length > 0 ? (
-            strategies.map((strategy) => (
-              <Card key={strategy.id} className="p-4">
-                <Typography variant="h6">{strategy.name}</Typography>
-                <Typography variant="body2" className="text-gray-600 mt-1">
-                  {strategy.description}
-                </Typography>
-                <div className="mt-3 flex justify-between items-center">
-                  <span className={`px-2 py-1 rounded-full text-xs ${strategy.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                    {strategy.active ? 'Active' : 'Inactive'}
-                  </span>
-                  <Button variant="outlined" size="small">
-                    Edit
-                  </Button>
-                </div>
-              </Card>
-            ))
-          ) : (
-            <Card className="p-6 col-span-3">
-              <Typography className="text-center text-gray-500">
+      <Grid container spacing={3}>
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
+            {strategies.length === 0 ? (
+              <Typography variant="body1" align="center" py={4}>
                 No strategies found. Create your first strategy to get started.
               </Typography>
-            </Card>
-          )}
-        </div>
-      )}
-    </div>
+            ) : (
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Pair</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {strategies.map((strategy) => (
+                      <TableRow key={strategy.id}>
+                        <TableCell>{strategy.name}</TableCell>
+                        <TableCell>{strategy.type}</TableCell>
+                        <TableCell>{strategy.pair}</TableCell>
+                        <TableCell>
+                          {strategy.active ? (
+                            <Box sx={{ color: 'success.main', display: 'flex', alignItems: 'center' }}>
+                              <span style={{ fontSize: '12px', marginRight: '4px' }}>●</span> Active
+                            </Box>
+                          ) : (
+                            <Box sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center' }}>
+                              <span style={{ fontSize: '12px', marginRight: '4px' }}>●</span> Inactive
+                            </Box>
+                          )}
+                        </TableCell>
+                        <TableCell align="right">
+                          <IconButton 
+                            onClick={() => handleToggleStrategy(strategy.id, strategy.active)}
+                            color={strategy.active ? 'warning' : 'success'}
+                          >
+                            {strategy.active ? <PauseIcon /> : <PlayArrowIcon />}
+                          </IconButton>
+                          <IconButton 
+                            onClick={() => handleEditStrategy(strategy.id)}
+                            color="primary"
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton 
+                            onClick={() => handleDeleteStrategy(strategy.id)}
+                            color="error"
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Paper>
+        </Grid>
+      </Grid>
+    </Container>
   );
 };
 
-export default Strategies;
+// Wrap with ErrorBoundary
+export default function StrategiesWithErrorBoundary() {
+  return (
+    <ErrorBoundary>
+      <Strategies />
+    </ErrorBoundary>
+  );
+}

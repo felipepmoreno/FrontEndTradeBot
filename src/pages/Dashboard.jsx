@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Grid, Card, Typography, CircularProgress } from '@mui/material';
-import axios from 'axios';
-import { apiRequest, getMockData } from '../utils/api';
+import { apiRequest } from '../utils/api';
 
 const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState({
@@ -17,24 +16,19 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        // Use our enhanced API utility with fallback
-        const response = await apiRequest('/dashboard', 'GET', null, getMockData('/dashboard'));
+        // Use our API utility without fallback to mock data
+        const response = await apiRequest('/dashboard', 'GET');
         setDashboardData(response.data || {
           activeStrategies: 0,
           totalProfit: 0,
           todayPerformance: 0,
           openPositions: 0
         });
+        setError(null);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-        setError('Could not connect to server. Showing demo data.');
-        // Fallback data
-        setDashboardData({
-          activeStrategies: 3,
-          totalProfit: 245.75,
-          todayPerformance: 1.25,
-          openPositions: 2
-        });
+        setError('Could not connect to server. Please try again later.');
+        // Don't use fallback data anymore
       } finally {
         setLoading(false);
       }
@@ -42,7 +36,7 @@ const Dashboard = () => {
 
     fetchDashboardData();
 
-    // For demo purposes, simulate updates every 30 seconds
+    // Refresh data every 30 seconds
     const interval = setInterval(fetchDashboardData, 30000);
     return () => clearInterval(interval);
   }, []);

@@ -1,10 +1,10 @@
 import React from 'react';
-import SettingsComponent from '../components/Settings/Settings';
 
 const Settings = () => {
   return (
-    <div className="container mx-auto">
-      <SettingsComponent />
+    <div>
+      <h1 className="text-2xl font-bold mb-4">Settings</h1>
+      <p>Configure your application settings</p>
     </div>
   );
 };
