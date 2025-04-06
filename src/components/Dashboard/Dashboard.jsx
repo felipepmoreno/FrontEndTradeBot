@@ -55,8 +55,16 @@ const Dashboard = () => {
 
   // Safely format a number with toFixed - prevents the error in the console
   const safeToFixed = (value, digits = 2) => {
-    if (value === undefined || value === null) return '0.00';
-    return Number(value).toFixed(digits);
+    // More robust check - handles NaN and other edge cases
+    if (value === undefined || value === null || isNaN(Number(value))) {
+      return '0.00';
+    }
+    try {
+      return Number(value).toFixed(digits);
+    } catch (err) {
+      console.warn(`Error formatting value: ${value}`, err);
+      return '0.00';
+    }
   };
 
   return (
