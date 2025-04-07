@@ -1,18 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { AppBar, Toolbar, Typography, Button, IconButton, Badge, Menu, MenuItem } from '@mui/material';
-import { NotificationsOutlined, AccountCircleOutlined } from '@mui/icons-material';
+import { 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  Button,
+  IconButton, 
+  Badge, 
+  Menu, 
+  MenuItem,
+  Chip
+} from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
-import { getMockData, getTestnetServerTime } from '../../utils/api';
+import { 
+  NotificationsOutlined, 
+  AccountCircleOutlined,
+  SignalWifiStatusbar4Bar as ConnectedIcon,
+  WifiOff as ErrorIcon
+} from '@mui/icons-material';
+import { getTestnetServerTime } from '../../utils/api';
 
 const Navbar = () => {
   const [accountMenu, setAccountMenu] = useState(null);
-  const [notifications, setNotifications] = useState([]);
   const [notificationMenu, setNotificationMenu] = useState(null);
-  const [pingStatus, setPingStatus] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [pingStatus, setPingStatus] = useState('checking'); // 'checking', 'connected', 'error'
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Mock notifications
     const mockNotifications = [
       { id: 1, message: 'Strategy BTC-1 executed a buy order', read: false },
       { id: 2, message: 'Daily report is ready', read: false }
@@ -22,6 +36,7 @@ const Navbar = () => {
     // Check API connection to display status
     const checkConnection = async () => {
       try {
+        setPingStatus('checking'); 
         const result = await getTestnetServerTime();
         setPingStatus(result.success ? 'connected' : 'error');
       } catch (error) {
@@ -30,6 +45,10 @@ const Navbar = () => {
     };
     
     checkConnection();
+    
+    // Periodically check connection
+    const intervalId = setInterval(checkConnection, 30000);
+    return () => clearInterval(intervalId);
   }, []);
   
   const handleAccountMenuOpen = (event) => {
@@ -57,6 +76,14 @@ const Navbar = () => {
         
         <Button color="inherit" component={Link} to="/dashboard">Dashboard</Button>
         <Button color="inherit" component={Link} to="/strategies">Strategies</Button>
+        
+        <Chip 
+          icon={pingStatus === 'connected' ? <ConnectedIcon /> : <ErrorIcon />}
+          label={pingStatus === 'connected' ? 'API Connected' : 'API Error'}
+          color={pingStatus === 'connected' ? 'success' : 'error'}
+          size="small"
+          sx={{ mr: 2 }}
+        />
         
         <IconButton color="inherit" onClick={handleNotificationMenuOpen}>
           <Badge badgeContent={notifications.filter(n => !n.read).length} color="error">

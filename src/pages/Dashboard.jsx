@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Grid, Card, Typography, CircularProgress } from '@mui/material';
-import { apiRequest } from '../utils/api';
+import { apiRequest, get } from '../utils/api';
+import { ENDPOINTS } from '../config/apiConfig'; // Import ENDPOINTS from your config
 
 const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState({
@@ -16,8 +17,11 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        // Use our API utility without fallback to mock data
-        const response = await apiRequest('/dashboard', 'GET');
+        // Fix: Swap the parameter order or use the get() helper method
+        const response = await apiRequest('GET', ENDPOINTS.PORTFOLIO);
+        // Alternative approach:
+        // const response = await get(ENDPOINTS.PORTFOLIO);
+        
         setDashboardData(response.data || {
           activeStrategies: 0,
           totalProfit: 0,
@@ -28,7 +32,6 @@ const Dashboard = () => {
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
         setError('Could not connect to server. Please try again later.');
-        // Don't use fallback data anymore
       } finally {
         setLoading(false);
       }
