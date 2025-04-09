@@ -1,7 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Dispatch, SetStateAction } from 'react'
 import { checkApiHealth } from '../services/api'
 
-const ApiStatus = () => {
+interface ApiStatusProps {
+  onStatusChange: Dispatch<SetStateAction<boolean>>;
+}
+
+const ApiStatus: React.FC<ApiStatusProps> = ({ onStatusChange }) => {
+  
   const [status, setStatus] = useState<'loading' | 'connected' | 'error'>('loading')
   const [lastChecked, setLastChecked] = useState<Date | null>(null)
 
@@ -10,8 +15,10 @@ const ApiStatus = () => {
     try {
       await checkApiHealth()
       setStatus('connected')
+      onStatusChange(true) // Notificar que a API está conectada
     } catch (error) {
       setStatus('error')
+      onStatusChange(false) // Notificar que a API não está conectada
       console.error('API health check failed:', error)
     }
     setLastChecked(new Date())
