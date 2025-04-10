@@ -6,8 +6,11 @@ export interface WalletConnectRequest {
 }
 
 export interface WalletConnectResponse {
-  wallet_id: string;
-  message: string;
+  wallet_id?: string;
+  wallet_name?: string;  // Adicionado para suportar resposta do backend atual
+  is_connected: boolean;
+  message?: string;
+  timestamp: string;
 }
 
 export interface WalletBalance {

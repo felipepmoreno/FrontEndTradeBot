@@ -25,8 +25,17 @@ const WalletConnect: React.FC = () => {
       const response = await walletApi.connect(apiKey, apiSecret, true);
       console.log('Resposta da API:', response);
       
-      if (response.data && response.data.wallet_id) {
-        setWalletId(response.data.wallet_id);
+      // Adaptando à estrutura real de resposta da API
+      if (response.data) {
+        if (response.data.wallet_id) {
+          setWalletId(response.data.wallet_id);
+        } else if (response.data.wallet_name) {
+          // Usando wallet_name como identificador se wallet_id não estiver disponível
+          setWalletId(response.data.wallet_name);
+        } else {
+          throw new Error('Resposta da API não contém identificador de carteira');
+        }
+        
         // Clear form
         setApiKey('');
         setApiSecret('');

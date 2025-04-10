@@ -29,7 +29,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // State variables
-  const [walletId, setWalletId] = useState<string | null>(
+  const [walletId, setWalletIdState] = useState<string | null>(
     localStorage.getItem('walletId')
   );
   const [balances, setBalances] = useState<WalletBalanceResponse | null>(null);
@@ -39,14 +39,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [error, setError] = useState<string | null>(null);
   const [activeSymbol, setActiveSymbol] = useState<string>('BTCUSDT');
 
-  // Save wallet ID to localStorage when it changes
-  useEffect(() => {
-    if (walletId) {
-      localStorage.setItem('walletId', walletId);
+  // Função para atualizar wallet ID no estado e localStorage
+  const setWalletId = (id: string | null) => {
+    setWalletIdState(id);
+    if (id) {
+      localStorage.setItem('walletId', id);
     } else {
       localStorage.removeItem('walletId');
     }
-  }, [walletId]);
+  };
 
   // Auto-refresh balances every minute if wallet is connected
   useEffect(() => {
@@ -69,7 +70,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 5000);
     
     return () => clearInterval(refreshInterval);
-  }, []);
+  }, [walletId]);
 
   // Refresh balances
   const refreshBalances = async () => {
@@ -78,11 +79,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       setIsLoading(true);
       const response = await walletApi.getBalance(walletId);
-      setBalances(response.data);
-      setError(null);
-    } catch (err) {
-      console.error('Failed to fetch balances:', err);
-      setError('Failed to fetch wallet balances');
+      
+      // Verificando se a resposta contém os dados esperados
+      if (response.data && Array.isArray(response.data.balances)) {
+        setBalances(response.data);
+        setError(null);
+      } else {
+        console.error('Formato de resposta inválido para balances:', response.data);
+        setError('Formato de resposta do saldo inválido');
+      }
+    } catch (err: any) {
+      console.error('Erro ao buscar saldos:', err);
+      if (err.response) {
+        setError(`Erro ao buscar saldos: ${err.response.status} ${err.response.statusText}`);
+      } else {
+        setError('Erro ao buscar saldos da carteira');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -92,11 +104,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const refreshBotStatus = async () => {
     try {
       const response = await botApi.getStatus();
-      setBotStatus(response.data);
-      setError(null);
-    } catch (err) {
-      console.error('Failed to fetch bot status:', err);
-      setError('Failed to fetch bot status');
+      
+      if (response.data && response.data.status) {
+        setBotStatus(response.data);
+        setError(null);
+      } else {
+        console.error('Formato de resposta inválido para status do bot:', response.data);
+        setError('Formato de resposta do status do bot inválido');
+      }
+    } catch (err: any) {
+      console.error('Erro ao buscar status do bot:', err);
+      if (err.response) {
+        setError(`Erro ao buscar status do bot: ${err.response.status} ${err.response.statusText}`);
+      } else {
+        setError('Erro ao buscar status do bot');
+      }
     }
   };
 
@@ -107,11 +129,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       setIsLoading(true);
       const response = await tradingApi.getOrders(walletId, activeSymbol);
-      setOrders(response.data);
-      setError(null);
-    } catch (err) {
-      console.error('Failed to fetch orders:', err);
-      setError('Failed to fetch orders');
+      
+      if (response.data && Array.isArray(response.data.orders)) {
+        setOrders(response.data);
+        setError(null);
+      } else {
+        console.error('Formato de resposta inválido para ordens:', response.data);
+        setError('Formato de resposta de ordens inválido');
+      }
+    } catch (err: any) {
+      console.error('Erro ao buscar ordens:', err);
+      if (err.response) {
+        setError(`Erro ao buscar ordens: ${err.response.status} ${err.response.statusText}`);
+      } else {
+        setError('Erro ao buscar ordens');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -133,8 +165,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       await refreshBotStatus();
       setError(null);
     } catch (err: any) {
-      console.error('Failed to start bot:', err);
-      setError(err.response?.data?.detail || 'Failed to start bot');
+      console.error('Erro ao iniciar bot:', err);
+      if (err.response?.data?.detail) {
+        setError(err.response.data.detail);
+      } else if (err.response) {
+        setError(`Erro ao iniciar bot: ${err.response.status} ${err.response.statusText}`);
+      } else {
+        setError('Erro ao iniciar bot');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -148,8 +186,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       await refreshBotStatus();
       setError(null);
     } catch (err: any) {
-      console.error('Failed to stop bot:', err);
-      setError(err.response?.data?.detail || 'Failed to stop bot');
+      console.error('Erro ao parar bot:', err);
+      if (err.response?.data?.detail) {
+        setError(err.response.data.detail);
+      } else if (err.response) {
+        setError(`Erro ao parar bot: ${err.response.status} ${err.response.statusText}`);
+      } else {
+        setError('Erro ao parar bot');
+      }
     } finally {
       setIsLoading(false);
     }
