@@ -1,89 +1,50 @@
-import { useState, useEffect, useCallback } from 'react';
-import { startBot, stopBot, getBotStatus } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
+import { BotStatus, BotStrategy } from '../types';
 
-interface BotControlProps {
-  walletId: string;
-}
+const TRADING_PAIRS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'DOGEUSDT'];
 
-interface BotConfig {
-  symbol: string;
-  interval_seconds: number;
-  max_amount: number;
-  wallet_id: string;
-  strategy: string;
-  buy_threshold?: number;
-  sell_threshold?: number;
-}
-
-interface BotStatus {
-  status: 'stopped' | 'running' | 'error';
-  symbol: string | null;
-  wallet_id: string | null;
-  start_time: string | null;
-  last_operation: string | null;
-  error_message: string | null;
-  config: BotConfig | null;
-  timestamp: string;
-}
-
-const BotControl: React.FC<BotControlProps> = ({ walletId }) => {
+const BotControl: React.FC = () => {
+  const { walletId, refreshOrders, startBot, stopBot, botStatus: contextBotStatus, refreshBotStatus } = useApp();
   const [symbol, setSymbol] = useState('BTCUSDT');
-  const [intervalSeconds, setIntervalSeconds] = useState(60);
-  const [maxAmount, setMaxAmount] = useState('100');
-  const [strategy, setStrategy] = useState('simple');
-  const [buyThreshold, setBuyThreshold] = useState('0.5');
-  const [sellThreshold, setSellThreshold] = useState('1.0');
+  const [maxAmount, setMaxAmount] = useState<number>(100);
+  const [intervalSeconds, setIntervalSeconds] = useState<number>(60);
+  const [buyThreshold, setBuyThreshold] = useState<number>(0.5);
+  const [sellThreshold, setSellThreshold] = useState<number>(1.0);
+  const [strategy, setStrategy] = useState<BotStrategy>(BotStrategy.SIMPLE);
   
-  const [botStatus, setBotStatus] = useState<BotStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [statusRefreshInterval, setStatusRefreshInterval] = useState<NodeJS.Timeout | null>(null);
-  
-  const commonSymbols = [
-    'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'DOGEUSDT',
-    'XRPUSDT', 'DOTUSDT', 'LTCUSDT', 'LINKUSDT', 'BCHUSDT'
-  ];
 
-  // Function to fetch bot status
-  const fetchBotStatus = useCallback(async () => {
-    try {
-      const status = await getBotStatus();
-      setBotStatus(status);
-    } catch (err) {
-      console.error('Error fetching bot status:', err);
-      // Don't set error message on status check failures to avoid cluttering the UI
-    }
+  // Get bot status on component mount and periodically
+  useEffect(() => {
+    refreshBotStatus();
+    
+    const intervalId = setInterval(() => {
+      refreshBotStatus();
+    }, 5000);  // Poll every 5 seconds
+
+    return () => {
+      clearInterval(intervalId);
+    };
   }, []);
 
-  // Setup auto-refresh of status when bot is running
+  // Update form fields when bot status changes
   useEffect(() => {
-    // If bot is running, start polling for status updates
-    if (botStatus?.status === 'running' && !statusRefreshInterval) {
-      const interval = setInterval(fetchBotStatus, 5000); // Update every 5 seconds
-      setStatusRefreshInterval(interval);
-    } 
-    // If bot is not running, clear the interval
-    else if (botStatus?.status !== 'running' && statusRefreshInterval) {
-      clearInterval(statusRefreshInterval);
-      setStatusRefreshInterval(null);
+    if (contextBotStatus?.status === 'running' && contextBotStatus.config) {
+      const config = contextBotStatus.config;
+      setSymbol(config.symbol || 'BTCUSDT');
+      setMaxAmount(config.max_amount || 100);
+      setIntervalSeconds(config.interval_seconds || 60);
+      setBuyThreshold(config.buy_threshold || 0.5);
+      setSellThreshold(config.sell_threshold || 1.0);
+      setStrategy(config.strategy || BotStrategy.SIMPLE);
     }
-
-    // Cleanup on unmount
-    return () => {
-      if (statusRefreshInterval) {
-        clearInterval(statusRefreshInterval);
-      }
-    };
-  }, [botStatus?.status, statusRefreshInterval, fetchBotStatus]);
-
-  // Initial status check
-  useEffect(() => {
-    fetchBotStatus();
-  }, [fetchBotStatus]);
+  }, [contextBotStatus]);
 
   const handleStartBot = async () => {
     if (!walletId) {
-      setError('Carteira não conectada. Conecte uma carteira primeiro.');
+      setError("Por favor, conecte sua carteira antes de iniciar o bot");
       return;
     }
 
@@ -91,22 +52,21 @@ const BotControl: React.FC<BotControlProps> = ({ walletId }) => {
     setError(null);
 
     try {
-      const config: BotConfig = {
+      await startBot({
         symbol,
-        interval_seconds: intervalSeconds,
-        max_amount: parseFloat(maxAmount),
         wallet_id: walletId,
-        strategy,
-        buy_threshold: parseFloat(buyThreshold),
-        sell_threshold: parseFloat(sellThreshold)
-      };
-
-      await startBot(config);
-      await fetchBotStatus(); // Update status after starting
+        max_amount: maxAmount,
+        interval_seconds: intervalSeconds,
+        buy_threshold: buyThreshold,
+        sell_threshold: sellThreshold,
+        strategy
+      });
       
-    } catch (err) {
-      console.error('Error starting bot:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao iniciar o bot');
+      // Refresh orders to show any new activity
+      refreshOrders();
+    } catch (err: any) {
+      console.error("Failed to start bot:", err);
+      setError(err.response?.data?.detail || 'Falha ao iniciar o bot');
     } finally {
       setIsLoading(false);
     }
@@ -118,211 +78,190 @@ const BotControl: React.FC<BotControlProps> = ({ walletId }) => {
 
     try {
       await stopBot();
-      await fetchBotStatus(); // Update status after stopping
-      
-    } catch (err) {
-      console.error('Error stopping bot:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao parar o bot');
+      // Refresh orders to show any new activity
+      refreshOrders();
+    } catch (err: any) {
+      console.error("Failed to stop bot:", err);
+      setError(err.response?.data?.detail || 'Falha ao parar o bot');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const formatDateTime = (dateTimeStr: string | null) => {
-    if (!dateTimeStr) return 'N/A';
-    return new Date(dateTimeStr).toLocaleString();
+  // Status indicator color
+  const getStatusColor = () => {
+    if (!contextBotStatus) return 'bg-gray-500';
+    switch (contextBotStatus.status) {
+      case 'running':
+        return 'bg-green-500';
+      case 'stopped':
+        return 'bg-red-500';
+      case 'error':
+        return 'bg-yellow-500';
+      default:
+        return 'bg-gray-500';
+    }
+  };
+
+  const getStatusText = () => {
+    if (!contextBotStatus) return 'Carregando...';
+    switch (contextBotStatus.status) {
+      case 'running':
+        return 'Ativo';
+      case 'stopped':
+        return 'Parado';
+      case 'error':
+        return 'Erro';
+      default:
+        return 'Desconhecido';
+    }
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-xl font-semibold mb-4">Controle do Bot</h2>
-      
-      {/* Bot Status Display */}
-      <div className="mb-6 p-4 border rounded-md bg-gray-50">
-        <h3 className="font-medium mb-2">Status do Bot</h3>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="text-sm">
-            <span className="text-gray-600 font-medium">Status:</span>
-            <span className={`ml-2 font-medium ${
-              botStatus?.status === 'running' ? 'text-green-600' : 
-              botStatus?.status === 'error' ? 'text-red-600' : 'text-gray-600'
-            }`}>
-              {botStatus?.status === 'running' ? 'Em execução' : 
-               botStatus?.status === 'error' ? 'Erro' : 
-               botStatus?.status === 'stopped' ? 'Parado' : 'Desconhecido'}
-            </span>
-          </div>
-          <div className="text-sm">
-            <span className="text-gray-600 font-medium">Par:</span>
-            <span className="ml-2">{botStatus?.symbol || 'N/A'}</span>
-          </div>
-          <div className="text-sm">
-            <span className="text-gray-600 font-medium">Carteira:</span>
-            <span className="ml-2">{botStatus?.wallet_id ? botStatus.wallet_id.substring(0, 8) + '...' : 'N/A'}</span>
-          </div>
-          <div className="text-sm">
-            <span className="text-gray-600 font-medium">Início:</span>
-            <span className="ml-2">{formatDateTime(botStatus?.start_time || null)}</span>
-          </div>
+    <div className="bg-white shadow-md rounded-lg p-6 mb-6">
+      <h2 className="text-xl font-bold mb-4">Controle do Bot</h2>
+
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
         </div>
-        
-        {botStatus?.last_operation && (
-          <div className="mt-3 text-sm">
-            <span className="text-gray-600 font-medium">Última operação:</span>
-            <span className="ml-2">{botStatus.last_operation}</span>
-          </div>
-        )}
-        
-        {botStatus?.error_message && (
-          <div className="mt-3 text-sm text-red-600">
-            <span className="font-medium">Erro:</span>
-            <span className="ml-2">{botStatus.error_message}</span>
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* Bot Configuration Form */}
-      <div className="mb-6">
-        <h3 className="font-medium mb-3">Configuração do Bot</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="botSymbol" className="block text-sm font-medium text-gray-700 mb-1">
-              Par de Trading
-            </label>
-            <select
-              id="botSymbol"
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
-              disabled={botStatus && botStatus.status === 'running' || isLoading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            >
-              {commonSymbols.map((sym) => (
-                <option key={sym} value={sym}>{sym}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label htmlFor="strategy" className="block text-sm font-medium text-gray-700 mb-1">
-              Estratégia
-            </label>
-            <select
-              id="strategy"
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value)}
-              disabled={(botStatus?.status as string) === 'running' || isLoading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            >
-              <option value="simple">Simples</option>
-              <option value="grid">Grid Trading</option>
-            </select>
-          </div>
-          
-          <div>
-            <label htmlFor="intervalSeconds" className="block text-sm font-medium text-gray-700 mb-1">
-              Intervalo (segundos)
-            </label>
-            <input
-              type="number"
-              id="intervalSeconds"
-              value={intervalSeconds}
-              onChange={(e) => setIntervalSeconds(parseInt(e.target.value) || 60)}
-              min="5"
-              max="3600"
-              disabled={(botStatus?.status as string) === 'running' || isLoading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            />
-          </div>
-          
-          <div>
-            <label htmlFor="maxAmount" className="block text-sm font-medium text-gray-700 mb-1">
-              Valor Máximo (USDT)
-            </label>
-            <input
-              type="text"
-              id="maxAmount"
-              value={maxAmount}
-              onChange={(e) => setMaxAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-              disabled={(botStatus?.status as string) === 'running' || isLoading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            />
-          </div>
-          
-          <div>
-            <label htmlFor="buyThreshold" className="block text-sm font-medium text-gray-700 mb-1">
-              Limiar de Compra (%)
-            </label>
-            <input
-              type="text"
-              id="buyThreshold"
-              value={buyThreshold}
-              onChange={(e) => setBuyThreshold(e.target.value.replace(/[^0-9.]/g, ''))}
-              disabled={botStatus?.status === 'running' as string || isLoading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            />
-          </div>
-          
-          <div>
-            <label htmlFor="sellThreshold" className="block text-sm font-medium text-gray-700 mb-1">
-              Limiar de Venda (%)
-            </label>
-            <input
-              type="text"
-              id="sellThreshold"
-              value={sellThreshold}
-              onChange={(e) => setSellThreshold(e.target.value.replace(/[^0-9.]/g, ''))}
-              disabled={botStatus?.status === 'running' || isLoading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            />
-          </div>
+      {contextBotStatus?.error_message && (
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
+          Erro do bot: {contextBotStatus.error_message}
         </div>
+      )}
 
-        {error && (
-          <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-md">
-            {error}
-          </div>
-        )}
-
-        <div className="flex space-x-4 mt-6">
-          {botStatus?.status !== 'running' ? (
-            <button
-              onClick={handleStartBot}
-              disabled={botStatus?.status === 'running' as string || isLoading}
-              className={`flex-1 py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 
-              ${isLoading || !walletId ? 'bg-gray-300 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 text-white'}`}
-            >
-              {isLoading ? 'Iniciando...' : 'Iniciar Bot'}
-            </button>
-          ) : (
-            <button
-              onClick={handleStopBot}
-              disabled={botStatus?.status === 'running' as string || isLoading}
-              className={`flex-1 py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 
-              ${isLoading ? 'bg-gray-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'}`}
-            >
-              {isLoading ? 'Parando...' : 'Parar Bot'}
-            </button>
-          )}
-          
-          <button
-            onClick={fetchBotStatus}
-            disabled={isLoading}
-            className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div>
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Par de Trading
+          </label>
+          <select
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value)}
+            disabled={contextBotStatus?.status === 'running' || isLoading}
+            className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
           >
-            Atualizar Status
-          </button>
+            {TRADING_PAIRS.map((pair) => (
+              <option key={pair} value={pair}>{pair}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Estratégia
+          </label>
+          <select
+            value={strategy}
+            onChange={(e) => setStrategy(e.target.value as BotStrategy)}
+            disabled={contextBotStatus?.status === 'running' || isLoading}
+            className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+          >
+            <option value={BotStrategy.SIMPLE}>Simples</option>
+            <option value={BotStrategy.GRID}>Grid</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Valor Máximo (USDT)
+          </label>
+          <input
+            type="number"
+            min="10"
+            step="10"
+            value={maxAmount}
+            onChange={(e) => setMaxAmount(Number(e.target.value))}
+            disabled={contextBotStatus?.status === 'running' || isLoading}
+            className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+          />
+        </div>
+
+        <div>
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Intervalo (segundos)
+          </label>
+          <input
+            type="number"
+            min="5"
+            step="5"
+            value={intervalSeconds}
+            onChange={(e) => setIntervalSeconds(Number(e.target.value))}
+            disabled={contextBotStatus?.status === 'running' || isLoading}
+            className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+          />
+        </div>
+
+        <div>
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Limiar de Compra (%)
+          </label>
+          <input
+            type="number"
+            min="0.1"
+            step="0.1"
+            value={buyThreshold}
+            onChange={(e) => setBuyThreshold(Number(e.target.value))}
+            disabled={contextBotStatus?.status === 'running' || isLoading}
+            className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+          />
+        </div>
+
+        <div>
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Limiar de Venda (%)
+          </label>
+          <input
+            type="number"
+            min="0.1"
+            step="0.1"
+            value={sellThreshold}
+            onChange={(e) => setSellThreshold(Number(e.target.value))}
+            disabled={contextBotStatus?.status === 'running' || isLoading}
+            className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+          />
         </div>
       </div>
 
-      <div className="text-sm text-gray-500 mt-4">
-        <p className="mb-1">
-          <strong>Importante:</strong> Configure cuidadosamente o bot antes de iniciá-lo.
-        </p>
-        <ul className="list-disc pl-5 space-y-1">
-          <li>Limiar de Compra: porcentagem de queda para acionar compra</li>
-          <li>Limiar de Venda: porcentagem de aumento para acionar venda</li>
-          <li>Defina o valor máximo de acordo com o saldo disponível na sua carteira</li>
-        </ul>
+      <div className="mb-6">
+        <div className="flex items-center">
+          <div className={`w-3 h-3 rounded-full mr-2 ${getStatusColor()}`}></div>
+          <span className="text-gray-700 font-medium">Status: {getStatusText()}</span>
+        </div>
+        {contextBotStatus?.last_operation && (
+          <div className="text-sm text-gray-600 mt-2">
+            Última operação: {contextBotStatus.last_operation}
+          </div>
+        )}
+      </div>
+
+      <div className="flex space-x-4">
+        <button
+          onClick={handleStartBot}
+          disabled={!walletId || contextBotStatus?.status === 'running' || isLoading}
+          className={`w-1/2 py-3 px-4 rounded font-bold ${
+            !walletId || contextBotStatus?.status === 'running' || isLoading
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-green-500 hover:bg-green-600 text-white'
+          }`}
+        >
+          {isLoading && contextBotStatus?.status !== 'running' ? 'Iniciando...' : 'Iniciar Bot'}
+        </button>
+
+        <button
+          onClick={handleStopBot}
+          disabled={contextBotStatus?.status !== 'running' || isLoading}
+          className={`w-1/2 py-3 px-4 rounded font-bold ${
+            contextBotStatus?.status !== 'running' || isLoading
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-red-500 hover:bg-red-600 text-white'
+          }`}
+        >
+          {isLoading && contextBotStatus?.status === 'running' ? 'Parando...' : 'Parar Bot'}
+        </button>
       </div>
     </div>
   );

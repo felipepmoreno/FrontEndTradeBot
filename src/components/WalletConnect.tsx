@@ -1,109 +1,112 @@
-import { useState } from 'react';
-import { connectWallet } from '../services/api';
+import React, { useState } from 'react';
+import { walletApi } from '../services/api';
+import { useApp } from '../context/AppContext';
 
-interface WalletConnectProps {
-  onConnect: (walletId: string) => void;
-}
-
-const WalletConnect: React.FC<WalletConnectProps> = ({ onConnect }) => {
+const WalletConnect: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
-  const [useTestnet, setUseTestnet] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { setWalletId, walletId } = useApp();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!apiKey || !apiSecret) {
-      setError('Por favor, preencha ambos API Key e API Secret');
+      setError('API Key and Secret are required');
       return;
     }
-
-    setIsLoading(true);
-    setError(null);
-
+    
     try {
-      const response = await connectWallet(apiKey, apiSecret, useTestnet);
+      setIsConnecting(true);
+      setError(null);
       
-      if (response && response.wallet_id) {
-        onConnect(response.wallet_id);
-      } else {
-        setError('Resposta inválida da API');
-      }
-    } catch (err) {
-      console.error('Connection error:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao conectar com a Binance');
+      const response = await walletApi.connect(apiKey, apiSecret, true);
+      setWalletId(response.data.wallet_id);
+      
+      // Clear form
+      setApiKey('');
+      setApiSecret('');
+    } catch (err: any) {
+      console.error('Connection failed:', err);
+      setError(err.response?.data?.detail || 'Failed to connect wallet');
     } finally {
-      setIsLoading(false);
+      setIsConnecting(false);
     }
   };
 
-  return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-xl font-semibold mb-4">Conectar Carteira</h2>
-      
-      <form onSubmit={handleSubmit}>
-        <div className="mb-4">
-          <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700 mb-1">
-            API Key
-          </label>
-          <input
-            type="text"
-            id="apiKey"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            placeholder="Cole sua Binance API Key aqui"
-          />
-        </div>
-        
-        <div className="mb-4">
-          <label htmlFor="apiSecret" className="block text-sm font-medium text-gray-700 mb-1">
-            API Secret
-          </label>
-          <input
-            type="password"
-            id="apiSecret"
-            value={apiSecret}
-            onChange={(e) => setApiSecret(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            placeholder="Cole seu Binance API Secret aqui"
-          />
-        </div>
-        
-        <div className="mb-6">
-          <div className="flex items-center">
-            <input
-              id="useTestnet"
-              type="checkbox"
-              checked={useTestnet}
-              onChange={(e) => setUseTestnet(e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-            />
-            <label htmlFor="useTestnet" className="ml-2 block text-sm text-gray-700">
-              Usar Testnet (recomendado)
-            </label>
-          </div>
-          <p className="mt-1 text-xs text-gray-500">
-            A Testnet permite testar o bot sem usar dinheiro real. Obtenha credenciais de teste em <a href="https://testnet.binance.vision/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">testnet.binance.vision</a>.
-          </p>
-        </div>
+  const handleDisconnect = () => {
+    setWalletId(null);
+  };
 
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
-            {error}
+  return (
+    <div className="bg-white shadow-md rounded-lg p-6 mb-6">
+      <h2 className="text-xl font-bold mb-4">Conectar Carteira</h2>
+      
+      {walletId ? (
+        <div className="text-center">
+          <p className="mb-4 text-green-600">
+            Carteira conectada com sucesso!
+          </p>
+          <p className="mb-4 text-gray-600 text-sm">
+            ID da Carteira: <span className="font-mono">{walletId.substring(0, 8)}...</span>
+          </p>
+          <button
+            onClick={handleDisconnect}
+            className="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded"
+          >
+            Desconectar
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={handleConnect}>
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              {error}
+            </div>
+          )}
+          
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="apiKey">
+              API Key
+            </label>
+            <input
+              id="apiKey"
+              type="text"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              placeholder="Insira sua API Key da Binance"
+              required
+            />
           </div>
-        )}
-        
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          {isLoading ? 'Conectando...' : 'Conectar'}
-        </button>
-      </form>
+          
+          <div className="mb-6">
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="apiSecret">
+              Secret Key
+            </label>
+            <input
+              id="apiSecret"
+              type="password"
+              value={apiSecret}
+              onChange={(e) => setApiSecret(e.target.value)}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              placeholder="Insira sua Secret Key da Binance"
+              required
+            />
+          </div>
+          
+          <div className="flex items-center justify-center">
+            <button
+              type="submit"
+              disabled={isConnecting}
+              className="bg-primary hover:bg-primary-dark text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
+            >
+              {isConnecting ? 'Conectando...' : 'Conectar'}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 };

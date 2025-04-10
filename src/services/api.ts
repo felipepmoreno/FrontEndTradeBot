@@ -1,174 +1,56 @@
-// Base API URLs - adjust as needed for your environment
-const API_BASE_URL = 'http://localhost:5000';
+import axios from 'axios';
 
-interface ApiErrorResponse {
-  message: string;
-  error: string;
-  status: number;
-}
+// Base URL for API requests - matches the proxy configuration in vite.config.ts
+const api = axios.create({
+  baseURL: '/api',
+});
 
-interface ApiResponse<T> {
-  data?: T;
-  error?: ApiErrorResponse;
-}
+// Wallet API endpoints
+export const walletApi = {
+  connect: (apiKey: string, apiSecret: string, useTestnet: boolean = true) => 
+    api.post('/wallet/connect', { api_key: apiKey, api_secret: apiSecret, use_testnet: useTestnet }),
+  getBalance: (walletId: string) => 
+    api.get(`/wallet/balance?wallet_id=${walletId}`),
+};
 
-// Helper function to handle API responses
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    let errorMessage;
-    try {
-      const errorData = await response.json();
-      errorMessage = errorData.message || errorData.error || 'Unknown error occurred';
-    } catch (e) {
-      errorMessage = `HTTP Error: ${response.status}`;
-    }
-    throw new Error(errorMessage);
-  }
-  return response.json();
-}
+// Binance API endpoints
+export const binanceApi = {
+  getStatus: () => 
+    api.get('/binance/status'),
+  getPrice: (symbol: string) => 
+    api.get(`/binance/price/${symbol}`),
+};
 
-// Check API health
-export async function checkApiHealth(): Promise<{ status: string }> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/health`);
-    return handleResponse(response);
-  } catch (error) {
-    console.error('API health check failed:', error);
-    throw new Error('API is not available');
-  }
-}
+// Trading API endpoints
+export const tradingApi = {
+  buy: (walletId: string, symbol: string, quantity: number, price?: number) => 
+    api.post('/trading/buy', { wallet_id: walletId, symbol, quantity, price }),
+  sell: (walletId: string, symbol: string, quantity: number, price?: number) => 
+    api.post('/trading/sell', { wallet_id: walletId, symbol, quantity, price }),
+  getOrders: (walletId: string, symbol?: string) => 
+    api.get(`/trading/orders?wallet_id=${walletId}${symbol ? `&symbol=${symbol}` : ''}`),
+  getOrder: (orderId: string, walletId: string, symbol: string) => 
+    api.get(`/trading/order/${orderId}?wallet_id=${walletId}&symbol=${symbol}`),
+  cancelOrder: (orderId: string, walletId: string, symbol: string) => 
+    api.delete(`/trading/order/${orderId}?wallet_id=${walletId}&symbol=${symbol}`),
+};
 
-// Connect wallet with Binance API credentials
-export async function connectWallet(apiKey: string, apiSecret: string, useTestnet: boolean = true): Promise<any> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/binance/connect`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ api_key: apiKey, api_secret: apiSecret, use_testnet: useTestnet }),
-    });
-    return handleResponse(response);
-  } catch (error) {
-    console.error('Connect wallet error:', error);
-    throw error;
-  }
-}
+// Bot API endpoints
+export const botApi = {
+  start: (walletId: string, symbol: string, maxAmount: number, intervalSeconds: number, strategy: string = 'simple', buyThreshold?: number, sellThreshold?: number) => 
+    api.post('/bot/start', { 
+      wallet_id: walletId, 
+      symbol, 
+      max_amount: maxAmount, 
+      interval_seconds: intervalSeconds,
+      strategy,
+      buy_threshold: buyThreshold,
+      sell_threshold: sellThreshold
+    }),
+  stop: () => 
+    api.post('/bot/stop'),
+  getStatus: () => 
+    api.get('/bot/status'),
+};
 
-// Get wallet balance
-export async function getWalletBalance(walletId: string): Promise<any> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/wallet/balance?wallet_id=${encodeURIComponent(walletId)}`);
-    return handleResponse(response);
-  } catch (error) {
-    console.error('Get wallet balance error:', error);
-    throw error;
-  }
-}
-
-// Place a buy order
-export async function placeBuyOrder(orderData: {
-  symbol: string;
-  quantity: number;
-  wallet_id: string;
-  price?: number;
-}): Promise<any> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/trading/buy`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(orderData),
-    });
-    return handleResponse(response);
-  } catch (error) {
-    console.error('Place buy order error:', error);
-    throw error;
-  }
-}
-
-// Place a sell order
-export async function placeSellOrder(orderData: {
-  symbol: string;
-  quantity: number;
-  wallet_id: string;
-  price?: number;
-}): Promise<any> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/trading/sell`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(orderData),
-    });
-    return handleResponse(response);
-  } catch (error) {
-    console.error('Place sell order error:', error);
-    throw error;
-  }
-}
-
-// Get recent orders
-export async function getOrders(walletId: string): Promise<any> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/trading/orders?wallet_id=${encodeURIComponent(walletId)}`);
-    return handleResponse(response);
-  } catch (error) {
-    console.error('Get orders error:', error);
-    throw error;
-  }
-}
-
-// Start trading bot
-export async function startBot(config: {
-  symbol: string;
-  interval_seconds: number;
-  max_amount: number;
-  wallet_id: string;
-  strategy: string;
-  buy_threshold?: number;
-  sell_threshold?: number;
-}): Promise<any> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/bot/start`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(config),
-    });
-    return handleResponse(response);
-  } catch (error) {
-    console.error('Start bot error:', error);
-    throw error;
-  }
-}
-
-// Stop trading bot
-export async function stopBot(): Promise<any> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/bot/stop`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    return handleResponse(response);
-  } catch (error) {
-    console.error('Stop bot error:', error);
-    throw error;
-  }
-}
-
-// Get bot status
-export async function getBotStatus(): Promise<any> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/bot/status`);
-    return handleResponse(response);
-  } catch (error) {
-    console.error('Get bot status error:', error);
-    throw error;
-  }
-}
+export default api;

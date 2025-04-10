@@ -1,137 +1,82 @@
-import { useState, useEffect } from 'react';
-import { getWalletBalance } from '../services/api';
+import React from 'react';
+import { useApp } from '../context/AppContext';
 
-interface WalletBalanceProps {
-  walletId: string;
-}
+const WalletBalance: React.FC = () => {
+  const { balances, refreshBalances, isLoading, walletId, error } = useApp();
 
-interface Asset {
-  asset: string;
-  free: string;
-  locked: string;
-}
-
-const WalletBalance: React.FC<WalletBalanceProps> = ({ walletId }) => {
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-
-  const fetchBalances = async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const data = await getWalletBalance(walletId);
-      
-      // Sort by asset value (free amount)
-      const sortedAssets = data.balances
-        .filter((asset: Asset) => 
-          parseFloat(asset.free) > 0 || parseFloat(asset.locked) > 0
-        )
-        .sort((a: Asset, b: Asset) => 
-          parseFloat(b.free) - parseFloat(a.free)
-        );
-      
-      setAssets(sortedAssets);
-      setLastUpdated(new Date());
-    } catch (err) {
-      console.error('Error fetching balances:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao buscar saldos');
-    } finally {
-      setIsLoading(false);
-    }
+  const handleRefresh = () => {
+    refreshBalances();
   };
 
-  useEffect(() => {
-    if (walletId) {
-      fetchBalances();
-    }
-  }, [walletId]);
-
-  const formatCurrency = (value: string | number) => {
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    
-    if (num === 0) return '0';
-    
-    if (num < 0.001) {
-      return num.toExponential(4);
-    }
-    
-    return num.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 8,
-    });
-  };
+  // Filter to only show common crypto assets
+  const relevantBalances = balances?.balances.filter(
+    balance => 
+      parseFloat(balance.free.toString()) > 0 || 
+      parseFloat(balance.locked.toString()) > 0
+  ).slice(0, 8);
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="bg-white shadow-md rounded-lg p-6 mb-6">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">Saldo da Carteira</h2>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={fetchBalances}
-            disabled={isLoading}
-            className="bg-indigo-100 text-indigo-600 hover:bg-indigo-200 px-3 py-1 rounded text-sm focus:outline-none"
-            title="Atualizar saldos"
-          >
-            {isLoading ? 'Atualizando...' : 'Atualizar'}
-          </button>
-        </div>
+        <h2 className="text-xl font-bold">Saldo da Carteira</h2>
+        <button 
+          onClick={handleRefresh}
+          disabled={isLoading || !walletId}
+          className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded text-sm flex items-center"
+        >
+          {isLoading ? (
+            <span>Atualizando...</span>
+          ) : (
+            <span>Atualizar</span>
+          )}
+        </button>
       </div>
-      
-      {lastUpdated && (
-        <p className="text-xs text-gray-500 mb-3">
-          Última atualização: {lastUpdated.toLocaleString()}
-        </p>
+
+      {!walletId && (
+        <div className="text-center py-8 text-gray-500">
+          Conecte sua carteira para ver os saldos
+        </div>
       )}
-      
+
       {error && (
-        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           {error}
         </div>
       )}
-      
-      {isLoading && !assets.length ? (
-        <div className="flex justify-center items-center h-32">
-          <span className="text-gray-500">Carregando saldos...</span>
-        </div>
-      ) : assets.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ativo
-                </th>
-                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Disponível
-                </th>
-                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Em uso
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {assets.map((asset) => (
-                <tr key={asset.asset}>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {asset.asset}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
-                    {formatCurrency(asset.free)}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
-                    {formatCurrency(asset.locked)}
-                  </td>
+
+      {walletId && balances && (
+        <div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="py-2 px-4 text-left">Ativo</th>
+                  <th className="py-2 px-4 text-right">Disponível</th>
+                  <th className="py-2 px-4 text-right">Em Uso</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="text-center py-6 text-gray-500">
-          Nenhum ativo encontrado. Se você acabou de conectar sua carteira, talvez precise depositar fundos.
+              </thead>
+              <tbody>
+                {relevantBalances && relevantBalances.length > 0 ? (
+                  relevantBalances.map((balance) => (
+                    <tr key={balance.asset} className="border-t border-gray-200">
+                      <td className="py-2 px-4 font-medium">{balance.asset}</td>
+                      <td className="py-2 px-4 text-right">{parseFloat(balance.free.toString()).toFixed(8)}</td>
+                      <td className="py-2 px-4 text-right">{parseFloat(balance.locked.toString()).toFixed(8)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={3} className="py-4 text-center text-gray-500">
+                      Nenhum saldo encontrado
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-2 text-xs text-gray-500 text-right">
+            Última atualização: {new Date(balances.timestamp).toLocaleString()}
+          </div>
         </div>
       )}
     </div>
