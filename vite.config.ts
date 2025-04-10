@@ -8,10 +8,12 @@ export default defineConfig({
     proxy: {
       // Configuração de proxy para redirecionar as requisições da API
       '/api': {
-        target: 'http://localhost:5000', // Endereço do backend
+        target: 'http://localhost:8000', // Endereço do backend atualizado para porta 8000
         changeOrigin: true,
         secure: false,
+        rewrite: (path) => path.replace(/^\/api/, ''), // Remove o prefixo /api das requisições
       },
     },
+    cors: true
   },
 })

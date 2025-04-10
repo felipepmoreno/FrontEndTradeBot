@@ -1,9 +1,23 @@
 import axios from 'axios';
 
-// Base URL for API requests - matches the proxy configuration in vite.config.ts
+// Base URL for API requests - define a URL base explícita para apontar para o backend
 const api = axios.create({
-  baseURL: '/api',
+  // Apontando diretamente para a porta 8000 onde está rodando o backend
+  baseURL: 'http://localhost:8000/api',
+  // Adicionando cabeçalhos comuns para todas as requisições
+  headers: {
+    'Content-Type': 'application/json',
+  }
 });
+
+// Interceptadores para tratar erros globalmente
+api.interceptors.response.use(
+  response => response,
+  error => {
+    console.error('API Error:', error);
+    return Promise.reject(error);
+  }
+);
 
 // Wallet API endpoints
 export const walletApi = {

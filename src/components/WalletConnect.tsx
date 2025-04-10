@@ -13,7 +13,7 @@ const WalletConnect: React.FC = () => {
     e.preventDefault();
     
     if (!apiKey || !apiSecret) {
-      setError('API Key and Secret are required');
+      setError('API Key e Secret são obrigatórios');
       return;
     }
     
@@ -21,15 +21,36 @@ const WalletConnect: React.FC = () => {
       setIsConnecting(true);
       setError(null);
       
+      console.log('Tentando conectar ao backend...');
       const response = await walletApi.connect(apiKey, apiSecret, true);
-      setWalletId(response.data.wallet_id);
+      console.log('Resposta da API:', response);
       
-      // Clear form
-      setApiKey('');
-      setApiSecret('');
+      if (response.data && response.data.wallet_id) {
+        setWalletId(response.data.wallet_id);
+        // Clear form
+        setApiKey('');
+        setApiSecret('');
+      } else {
+        throw new Error('Resposta inválida do servidor');
+      }
     } catch (err: any) {
-      console.error('Connection failed:', err);
-      setError(err.response?.data?.detail || 'Failed to connect wallet');
+      console.error('Erro na conexão:', err);
+      
+      // Tratamento de erro mais detalhado
+      if (err.response) {
+        // O servidor respondeu com um status de erro
+        console.error('Erro do servidor:', err.response.data);
+        setError(err.response.data?.detail || 
+                `Erro ${err.response.status}: ${err.response.statusText}`);
+      } else if (err.request) {
+        // A requisição foi feita mas não houve resposta
+        console.error('Sem resposta do servidor:', err.request);
+        setError('Sem resposta do servidor. Verifique se o backend está rodando.');
+      } else {
+        // Algo aconteceu na configuração da requisição
+        console.error('Erro na configuração:', err.message);
+        setError(`Erro: ${err.message}`);
+      }
     } finally {
       setIsConnecting(false);
     }
